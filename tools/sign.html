@@ -7,9 +7,9 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <input id="txt_url" type="text" />
-    <input id="btnLogin" type="button" value="lgoin" />
-    <input id="btnGen" type="button" value="open all" />
+    <!--<input id="txt_url" type="text" />-->
+    <input id="btnLogin" type="button" value="lgoin" style='width:100%; height:50px;' />
+    <br><br><input id="btnGen" type="button" value="open all" style='width:100%; height:50px;' />
     <div id="showLink">
 
     </div>
@@ -24,8 +24,8 @@
         });
         $("#btnGen").click(function () {
             $(r).each(function(i,e){
-				var url = e.url;
-				//console.log(url);
+		var url = e.url;
+		//console.log(url);
                 window.open(url);
             });
         });
