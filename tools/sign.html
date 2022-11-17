@@ -9,6 +9,7 @@
 <body>
     <!--<input id="txt_url" type="text" />-->
     <input id="btnLogin" type="button" value="lgoin" style='width:100%; height:50px;' />
+    <br><br><input id="btnGen2" type="button" value="open 2" style='width:100%; height:50px;' />
     <br><br><input id="btnGen" type="button" value="open all" style='width:100%; height:50px;' />
     <div id="showLink">
 
@@ -24,9 +25,23 @@
         });
         $("#btnGen").click(function () {
             $(r).each(function(i,e){
-		var url = e.url;
-		//console.log(url);
-                window.open(url);
+                var url = e.url;
+                setTimeout(function(){
+                    //console.log(url);
+                    window.open(url);
+                },100*i);
+            });
+        });
+        $("#btnGen2").click(function () {
+            $(r).each(function(i,e){
+                var url = e.url;
+                if (i<3)
+                {
+                    setTimeout(function(){
+                        //console.log(url);
+                        window.open(url);
+                    },100*i);
+                }
             });
         });
     </script>
