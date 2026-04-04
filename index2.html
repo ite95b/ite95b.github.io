@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>公告系統</title>
+<style>
+  body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; background-color: #f4f4f9; }
+  .container { max-width: 700px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+  
+  /* 管理員區塊 */
+  .admin-panel { background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+  input[type="password"], input[type="text"] { font-size: 15px; padding: 8px; width: 80%; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
+  textarea { width: 90%; height: 100px; font-size: 15px; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; resize: vertical; }
+  button { font-size: 15px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+  button:hover { background-color: #0056b3; }
+  button.delete-btn { background-color: #dc3545; font-size: 13px; padding: 5px 12px; }
+  button.delete-btn:hover { background-color: #a71d2a; }
+  button.edit-btn { background-color: #ffc107; color: #333; font-size: 13px; padding: 5px 12px; }
+  button.edit-btn:hover { background-color: #e0a800; }
+
+  /* 公告列表 */
+  .announcement { text-align: left; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #fff; }
+  .announcement h3 { margin: 0 0 5px 0; color: #333; }
+  .announcement .date { font-size: 12px; color: #999; margin-bottom: 8px; }
+  .announcement p { margin: 0; color: #555; white-space: pre-wrap; }
+  .announcement .btn-row { margin-top: 10px; display: none; }
+  
+  .status { font-size: 14px; color: #666; margin: 10px 0; }
+  .toggle-btn { background-color: #6c757d; margin-bottom: 10px; }
+  .toggle-btn:hover { background-color: #495057; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>📢 公告系統</h2>
+
+  <!-- 管理員入口 -->
+  <button class="toggle-btn" onclick="toggleAdmin()">🔐 管理員登入</button>
+
+  <div class="admin-panel" id="adminPanel" style="display:none;">
+    <h3>管理員區域</h3>
+    <input id="password" type="password" placeholder="請輸入管理員密碼">
+    <button onclick="login()">登入</button>
+    <p class="status" id="loginStatus"></p>
+
+    <!-- 新增/編輯公告（登入後顯示）-->
+    <div id="editArea" style="display:none;">
+      <hr>
+      <h4 id="formTitle">新增公告</h4>
+      <input id="titleInput" type="text" placeholder="公告標題">
+      <br>
+      <textarea id="contentInput" placeholder="公告內容..."></textarea>
+      <br>
+      <button onclick="submitAnnouncement()">送出</button>
+      <button onclick="cancelEdit()" style="background:#6c757d;">取消</button>
+      <p class="status" id="submitStatus"></p>
+    </div>
+  </div>
+
+  <!-- 公告列表 -->
+  <div id="announcementList">載入中...</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, remove, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "你的apiKey",
+  databaseURL: "https://text-sync-1854b-default-rtdb.firebaseio.com/"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+let correctPassword = "";
+let isLoggedIn = false;
+let editingKey = null; // 目前編輯的公告 key
+
+// 抓取密碼
+get(ref(db, 'key')).then((snapshot) => {
+  correctPassword = String(snapshot.val()).trim();
+});
+
+// 即時監聽公告列表
+onValue(ref(db, 'announcements'), (snapshot) => {
+  const list = document.getElementById("announcementList");
+  const data = snapshot.val();
+
+  if (!data) {
+    list.innerHTML = "<p style='color:#999'>目前沒有公告</p>";
+    return;
+  }
+
+  // 依時間倒序排列
+  const entries = Object.entries(data).sort((a, b) => b[1].date.localeCompare(a[1].date));
+
+  list.innerHTML = entries.map(([key, item]) => `
+    <div class="announcement">
+      <h3>${item.title}</h3>
+      <div class="date">📅 ${item.date}</div>
+      <p>${item.content}</p>
+      <div class="btn-row" id="btnRow_${key}">
+        <button class="edit-btn" onclick="window.startEdit('${key}', \`${item.title}\`, \`${item.content}\`)">✏️ 編輯</button>
+        <button class="delete-btn" onclick="window.deleteAnnouncement('${key}')">🗑️ 刪除</button>
+      </div>
+    </div>
+  `).join("");
+
+  // 如果已登入，顯示管理按鈕
+  if (isLoggedIn) showAdminButtons();
+});
+
+// 切換管理員面板
+window.toggleAdmin = function() {
+  const panel = document.getElementById("adminPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+};
+
+// 登入
+window.login = function() {
+  const input = document.getElementById("password").value.trim();
+  const status = document.getElementById("loginStatus");
+
+  if (input === correctPassword && correctPassword !== "") {
+    isLoggedIn = true;
+    status.innerText = "✅ 登入成功";
+    document.getElementById("editArea").style.display = "block";
+    showAdminButtons();
+  } else {
+    status.innerText = "⚠️ 密碼錯誤";
+  }
+};
+
+// 顯示管理員的編輯/刪除按鈕
+function showAdminButtons() {
+  document.querySelectorAll('[id^="btnRow_"]').forEach(el => {
+    el.style.display = "block";
+  });
+}
+
+// 送出公告（新增或編輯）
+window.submitAnnouncement = function() {
+  const title = document.getElementById("titleInput").value.trim();
+  const content = document.getElementById("contentInput").value.trim();
+  const status = document.getElementById("submitStatus");
+  const today = new Date().toISOString().split("T")[0];
+
+  if (!title || !content) {
+    status.innerText = "⚠️ 標題和內容不能空白";
+    return;
+  }
+
+  const data = { title, content, date: today };
+
+  if (editingKey) {
+    // 編輯模式：覆蓋原本的
+    set(ref(db, `announcements/${editingKey}`), data)
+      .then(() => { status.innerText = "✅ 編輯成功"; cancelEdit(); })
+      .catch(err => { status.innerText = "❌ 失敗：" + err.message; });
+  } else {
+    // 新增模式：push 自動產生 key
+    push(ref(db, 'announcements'), data)
+      .then(() => { status.innerText = "✅ 新增成功"; cancelEdit(); })
+      .catch(err => { status.innerText = "❌ 失敗：" + err.message; });
+  }
+};
+
+// 開始編輯
+window.startEdit = function(key, title, content) {
+  editingKey = key;
+  document.getElementById("titleInput").value = title;
+  document.getElementById("contentInput").value = content;
+  document.getElementById("formTitle").innerText = "編輯公告";
+  document.getElementById("adminPanel").style.display = "block";
+  window.scrollTo(0, 0);
+};
+
+// 取消編輯
+window.cancelEdit = function() {
+  editingKey = null;
+  document.getElementById("titleInput").value = "";
+  document.getElementById("contentInput").value = "";
+  document.getElementById("formTitle").innerText = "新增公告";
+  document.getElementById("submitStatus").innerText = "";
+};
+
+// 刪除公告
+window.deleteAnnouncement = function(key) {
+  if (!confirm("確定要刪除這則公告嗎？")) return;
+  remove(ref(db, `announcements/${key}`))
+    .catch(err => alert("刪除失敗：" + err.message));
+};
+</script>
+</body>
+</html>
