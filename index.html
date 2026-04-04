@@ -82,6 +82,8 @@ document.getElementById("submitBtn").addEventListener("click", function() {
   const userPassword = document.getElementById("password").value;
 
   // 驗證密碼
+  console.log("userPassword：", userPassword);
+  console.log("correctPassword：", correctPassword);
   if (userPassword === correctPassword && correctPassword !== "") {
     statusEl.innerText = "正在送出...";
     
