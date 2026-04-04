@@ -63,7 +63,7 @@ let correctPassword = "";
 
 // 1. 初始化抓取密碼
 get(ref(db, 'key')).then((snapshot) => {
-  correctPassword = snapshot.val();
+  correctPassword = snapshot.val().trim();
   console.log("載入的密碼：", correctPassword);
   document.getElementById("status").innerText = "連線成功，密碼驗證後即可送出";
 }).catch(err => {
@@ -79,7 +79,7 @@ onValue(ref(db, 'text'), (snapshot) => {
 document.getElementById("submitBtn").addEventListener("click", function() {
   const statusEl = document.getElementById("status");
   const inputText = document.getElementById("input").value;
-  const userPassword = document.getElementById("password").value;
+  const userPassword = document.getElementById("password").value.trim();
 
   // 驗證密碼
   console.log("userPassword：", userPassword);
