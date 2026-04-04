@@ -72,6 +72,20 @@ let correctPassword = "";
 let isLoggedIn = false;
 let editingKey = null;
 
+// 編碼：存入 Firebase 前使用
+function encode(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+// 解碼：從 Firebase 讀出後使用
+function decode(str) {
+  try {
+    return decodeURIComponent(escape(atob(str)));
+  } catch {
+    return str; // 舊資料沒有編碼，直接回傳
+  }
+}
+
 get(ref(db, 'key')).then((snapshot) => {
   correctPassword = String(snapshot.val()).trim();
 });
@@ -87,7 +101,16 @@ onValue(ref(db, 'announcements'), (snapshot) => {
 
   const entries = Object.entries(data).sort((a, b) => b[1].date.localeCompare(a[1].date));
 
-  list.innerHTML = entries.map(([key, item]) => `
+  // 解碼每筆資料
+  const decoded = Object.fromEntries(
+    entries.map(([key, item]) => [key, {
+      ...item,
+      title: decode(item.title),
+      content: decode(item.content)
+    }])
+  );
+
+  list.innerHTML = Object.entries(decoded).map(([key, item]) => `
     <div class="announcement">
       <h3>${item.title}</h3>
       <div class="date">📅 ${item.date}</div>
@@ -103,7 +126,7 @@ onValue(ref(db, 'announcements'), (snapshot) => {
   list.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
-      const item = data[key];
+      const item = decoded[key];
       window.startEdit(key, item.title, item.content);
     });
   });
@@ -154,7 +177,12 @@ window.submitAnnouncement = function() {
     return;
   }
 
-  const data = { title, content, date: today };
+  // 編碼後存入
+  const data = {
+    title: encode(title),
+    content: encode(content),
+    date: today
+  };
 
   if (editingKey) {
     set(ref(db, `announcements/${editingKey}`), data)
