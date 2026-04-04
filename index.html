@@ -62,16 +62,14 @@ document.getElementById("input").addEventListener("input", async function () {
   const inputText = this.value;
   const password = document.getElementById("password").value;
 
-  if (!password) return; // 沒密碼不允許
+  if (!password) return;
 
-  // 先讀 Firebase 的 key
-  onValue(KEY_REF, (snap) => {
-    const realKey = snap.val();
+  const snap = await get(ref(db, 'key'));
+  const realKey = snap.val();
 
-    if (password === realKey) {
-      set(TEXT_REF, inputText);
-    }
-  }, { onlyOnce: true });
+  if (password === realKey) {
+    set(ref(db, 'text'), inputText);
+  }
 
 });
 </script>
