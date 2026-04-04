@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>密碼控制文字同步</title>
+<style>
+body {
+  font-family: Arial;
+  text-align: center;
+  margin-top: 40px;
+}
+
+#display {
+  font-size: 50px;
+  margin-top: 30px;
+  border: 1px solid #ccc;
+  padding: 20px;
+}
+
+input {
+  font-size: 18px;
+  padding: 8px;
+  margin: 5px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>輸入區（需要密碼）</h2>
+
+<input id="password" type="password" placeholder="密碼">
+<br><br>
+<input id="input" placeholder="輸入文字">
+
+<div id="display">等待資料...</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+// 🔥 改成你的 Firebase
+const app = initializeApp({
+  apiKey: "test",
+  databaseURL: "https://text-sync-1854b-default-rtdb.firebaseio.com/"
+});
+
+const db = getDatabase(app);
+
+const TEXT_REF = ref(db, 'text');
+const KEY_REF = ref(db, 'key');
+
+// 👉 即時顯示
+onValue(TEXT_REF, (snapshot) => {
+  document.getElementById("display").innerText =
+    snapshot.val() || "等待資料...";
+});
+
+// 👉 輸入事件
+document.getElementById("input").addEventListener("input", async function () {
+
+  const inputText = this.value;
+  const password = document.getElementById("password").value;
+
+  if (!password) return; // 沒密碼不允許
+
+  // 先讀 Firebase 的 key
+  onValue(KEY_REF, (snap) => {
+    const realKey = snap.val();
+
+    if (password === realKey) {
+      set(TEXT_REF, inputText);
+    }
+  }, { onlyOnce: true });
+
+});
+</script>
+
+</body>
+</html>
