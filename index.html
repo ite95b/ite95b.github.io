@@ -64,6 +64,7 @@ let correctPassword = "";
 // 1. 初始化抓取密碼
 get(ref(db, 'key')).then((snapshot) => {
   correctPassword = snapshot.val();
+  console.log("載入的密碼：", correctPassword);
   document.getElementById("status").innerText = "連線成功，密碼驗證後即可送出";
 }).catch(err => {
   document.getElementById("status").innerText = "連線失敗：" + err.message;
