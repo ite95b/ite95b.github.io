@@ -72,18 +72,25 @@ let correctPassword = "";
 let isLoggedIn = false;
 let editingKey = null;
 
-// 編碼：存入 Firebase 前使用
 function encode(str) {
   return btoa(unescape(encodeURIComponent(str)));
 }
 
-// 解碼：從 Firebase 讀出後使用
 function decode(str) {
   try {
     return decodeURIComponent(escape(atob(str)));
   } catch {
-    return str; // 舊資料沒有編碼，直接回傳
+    return str;
   }
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 get(ref(db, 'key')).then((snapshot) => {
@@ -101,7 +108,6 @@ onValue(ref(db, 'announcements'), (snapshot) => {
 
   const entries = Object.entries(data).sort((a, b) => b[1].date.localeCompare(a[1].date));
 
-  // 解碼每筆資料
   const decoded = Object.fromEntries(
     entries.map(([key, item]) => [key, {
       ...item,
@@ -112,9 +118,9 @@ onValue(ref(db, 'announcements'), (snapshot) => {
 
   list.innerHTML = Object.entries(decoded).map(([key, item]) => `
     <div class="announcement">
-      <h3>${item.title}</h3>
+      <h3>${escapeHtml(item.title)}</h3>
       <div class="date">📅 ${item.date}</div>
-      <p>${item.content}</p>
+      <p>${escapeHtml(item.content)}</p>
       <div class="btn-row" id="btnRow_${key}">
         <button class="edit-btn" data-key="${key}">✏️ 編輯</button>
         <button class="delete-btn" data-key="${key}">🗑️ 刪除</button>
@@ -122,7 +128,6 @@ onValue(ref(db, 'announcements'), (snapshot) => {
     </div>
   `).join("");
 
-  // 編輯按鈕事件
   list.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
@@ -131,7 +136,6 @@ onValue(ref(db, 'announcements'), (snapshot) => {
     });
   });
 
-  // 刪除按鈕事件
   list.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       window.deleteAnnouncement(btn.dataset.key);
@@ -177,7 +181,6 @@ window.submitAnnouncement = function() {
     return;
   }
 
-  // 編碼後存入
   const data = {
     title: encode(title),
     content: encode(content),
