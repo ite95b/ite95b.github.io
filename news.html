@@ -2,7 +2,8 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>新聞0405</title>
+<title>公告系統</title>
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
 <style>
   body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; background-color: #f4f4f9; }
   .container { max-width: 700px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -17,29 +18,27 @@
   button.delete-btn:hover { background-color: #a71d2a; }
   button.edit-btn { background-color: #ffc107; color: #333; font-size: 13px; padding: 5px 12px; }
   button.edit-btn:hover { background-color: #e0a800; }
-  button.pdf-btn { background-color: #28a745; font-size: 13px; padding: 5px 12px; }
-  button.pdf-btn:hover { background-color: #1e7e34; }
+  button.dl-btn { background-color: #28a745; font-size: 13px; padding: 5px 12px; }
+  button.dl-btn:hover { background-color: #1e7e34; }
 
   .announcement { text-align: left; border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #fff; }
   .announcement h3 { margin: 0 0 5px 0; color: #333; }
   .announcement .date { font-size: 12px; color: #999; margin-bottom: 8px; }
   .announcement p { margin: 0; color: #555; white-space: pre-wrap; }
   .announcement .btn-row { margin-top: 10px; display: none; }
-  .announcement .pdf-row { margin-top: 10px; }
+  .announcement .file-row { margin-top: 10px; }
 
   .status { font-size: 14px; color: #666; margin: 10px 0; }
   .toggle-btn { background-color: #6c757d; margin-bottom: 10px; }
   .toggle-btn:hover { background-color: #495057; }
   .file-info { font-size: 13px; color: #888; margin: 4px 0; }
-  .remove-pdf { font-size: 12px; color: #dc3545; cursor: pointer; background: none; border: none; padding: 0; margin-left: 8px; }
-  .remove-pdf:hover { text-decoration: underline; background: none; color: #dc3545; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>📢 新聞</h2>
+  <h2>📢 公告系統</h2>
 
-  <button class="toggle-btn" onclick="toggleAdmin()">🔐 登入</button>
+  <button class="toggle-btn" onclick="toggleAdmin()">🔐 管理員登入</button>
 
   <div class="admin-panel" id="adminPanel" style="display:none;">
     <h3>管理員區域</h3>
@@ -49,14 +48,14 @@
 
     <div id="editArea" style="display:none;">
       <hr>
-      <h4 id="formTitle">新增新聞</h4>
-      <input id="titleInput" type="text" placeholder="新聞標題">
+      <h4 id="formTitle">新增公告</h4>
+      <input id="titleInput" type="text" placeholder="公告標題">
       <br>
-      <textarea id="contentInput" placeholder="新聞內容..."></textarea>
+      <textarea id="contentInput" placeholder="公告內容..."></textarea>
       <br>
-      <label style="font-size:14px;">📎 choose</label>
+      <label style="font-size:14px;">📎 （7MB 以內，可不附）</label>
       <br>
-      <input id="pdfInput" type="file">
+      <input id="fileInput" type="file">
       <p class="file-info" id="fileInfo"></p>
       <br>
       <button onclick="submitAnnouncement()">送出</button>
@@ -83,8 +82,8 @@ const db = getDatabase(app);
 let correctPassword = "";
 let isLoggedIn = false;
 let editingKey = null;
-let currentPdfBase64 = null;  // 目前選取或編輯中的 PDF
-let currentPdfName = null;
+let currentFileBase64 = null;
+let currentFileName = null;
 
 function encode(str) {
   return btoa(unescape(encodeURIComponent(str)));
@@ -107,55 +106,76 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-function readFileAsBase64(file) {
+// file → 壓縮 → Base64
+function fileToCompressedBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(',')[1]); // 去掉 data:xxx;base64, 前綴
+    reader.onload = () => {
+      try {
+        const uint8 = new Uint8Array(reader.result);
+        const compressed = fflate.deflateSync(uint8, { level: 6 });
+        let binary = '';
+        compressed.forEach(b => binary += String.fromCharCode(b));
+        const base64 = btoa(binary);
+        const ratio = ((1 - compressed.length / uint8.length) * 100).toFixed(1);
+        resolve({ base64, ratio });
+      } catch(e) {
+        reject(e);
+      }
+    };
     reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file);
   });
 }
 
-function downloadPdf(base64, filename) {
-  const byteChars = atob(base64);
-  const byteArray = new Uint8Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) {
-    byteArray[i] = byteChars.charCodeAt(i);
+// Base64 → 解壓縮 
+function downloadCompressed(base64, filename) {
+  const binary = atob(base64);
+  const uint8 = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    uint8[i] = binary.charCodeAt(i);
   }
-  //const blob = new Blob([byteArray], { type: 'application/pdf' });
-  const blob = new Blob([byteArray]);
+  const decompressed = fflate.inflateSync(uint8);
+  const blob = new Blob([decompressed]);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename || 'attachment.pdf';
+  a.download = filename || 'file';
   a.click();
   URL.revokeObjectURL(url);
 }
 
-// 監聽檔案選取
-document.getElementById('pdfInput').addEventListener('change', async function() {
+// 監聽file選取
+document.getElementById('fileInput').addEventListener('change', async function() {
   const file = this.files[0];
   const fileInfo = document.getElementById('fileInfo');
 
   if (!file) {
-    currentPdfBase64 = null;
-    currentPdfName = null;
+    currentFileBase64 = null;
+    currentFileName = null;
     fileInfo.innerText = "";
     return;
   }
 
   if (file.size > 7 * 1024 * 1024) {
-    fileInfo.innerText = "❌ over 7MB，請重新選擇";
+    fileInfo.innerText = "❌ file超過 7MB，請重新選擇";
     this.value = "";
-    currentPdfBase64 = null;
-    currentPdfName = null;
+    currentFileBase64 = null;
+    currentFileName = null;
     return;
   }
 
-  fileInfo.innerText = "⏳ 讀取中...";
-  currentPdfBase64 = await readFileAsBase64(file);
-  currentPdfName = file.name;
-  fileInfo.innerText = `✅ 已選取：${file.name}（${(file.size / 1024).toFixed(1)} KB）`;
+  fileInfo.innerText = "⏳ 壓縮中...";
+  try {
+    const { base64, ratio } = await fileToCompressedBase64(file);
+    currentFileBase64 = base64;
+    currentFileName = file.name;
+    const originalKB = (file.size / 1024).toFixed(1);
+    const compressedKB = (base64.length * 0.75 / 1024).toFixed(1);
+    fileInfo.innerText = `✅ 已選取：${file.name}　原始：${originalKB} KB　壓縮後：${compressedKB} KB　節省：${ratio}%`;
+  } catch(e) {
+    fileInfo.innerText = "❌ 壓縮失敗：" + e.message;
+  }
 });
 
 get(ref(db, 'key')).then((snapshot) => {
@@ -167,7 +187,7 @@ onValue(ref(db, 'announcements'), (snapshot) => {
   const data = snapshot.val();
 
   if (!data) {
-    list.innerHTML = "<p style='color:#999'>目前沒有新聞</p>";
+    list.innerHTML = "<p style='color:#999'>目前沒有公告</p>";
     return;
   }
 
@@ -186,9 +206,9 @@ onValue(ref(db, 'announcements'), (snapshot) => {
       <h3>${escapeHtml(item.title)}</h3>
       <div class="date">📅 ${item.date}</div>
       <p>${escapeHtml(item.content)}</p>
-      ${item.pdfBase64 ? `
-        <div class="pdf-row">
-          <button class="pdf-btn" data-key="${key}">📄 attachment：${escapeHtml(item.pdfName || 'attachment.pdf')}</button>
+      ${item.fileBase64 ? `
+        <div class="file-row">
+          <button class="dl-btn" data-key="${key}">📎 down：${escapeHtml(item.fileName || 'file')}</button>
         </div>
       ` : ''}
       <div class="btn-row" id="btnRow_${key}">
@@ -198,12 +218,12 @@ onValue(ref(db, 'announcements'), (snapshot) => {
     </div>
   `).join("");
 
-  
-  list.querySelectorAll('.pdf-btn').forEach(btn => {
+  // down按鈕事件
+  list.querySelectorAll('.dl-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
       const item = decoded[key];
-      downloadPdf(item.pdfBase64, item.pdfName);
+      downloadCompressed(item.fileBase64, item.fileName);
     });
   });
 
@@ -212,7 +232,7 @@ onValue(ref(db, 'announcements'), (snapshot) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
       const item = decoded[key];
-      window.startEdit(key, item.title, item.content, item.pdfBase64, item.pdfName);
+      window.startEdit(key, item.title, item.content, item.fileBase64, item.fileName);
     });
   });
 
@@ -234,7 +254,6 @@ window.toggleAdmin = function() {
 window.login = function() {
   const input = document.getElementById("password").value.trim();
   const status = document.getElementById("loginStatus");
-
   if (input === correctPassword && correctPassword !== "") {
     isLoggedIn = true;
     status.innerText = "✅ 登入成功";
@@ -268,10 +287,9 @@ window.submitAnnouncement = function() {
     date: today
   };
 
-  // 有 PDF 就加進去
-  if (currentPdfBase64) {
-    data.pdfBase64 = currentPdfBase64;
-    data.pdfName = currentPdfName;
+  if (currentFileBase64) {
+    data.fileBase64 = currentFileBase64;
+    data.fileName = currentFileName;
   }
 
   status.innerText = "⏳ 送出中...";
@@ -287,34 +305,34 @@ window.submitAnnouncement = function() {
   }
 };
 
-window.startEdit = function(key, title, content, pdfBase64, pdfName) {
+window.startEdit = function(key, title, content, fileBase64, fileName) {
   editingKey = key;
-  currentPdfBase64 = pdfBase64 || null;
-  currentPdfName = pdfName || null;
+  currentFileBase64 = fileBase64 || null;
+  currentFileName = fileName || null;
   document.getElementById("titleInput").value = title;
   document.getElementById("contentInput").value = content;
-  document.getElementById("formTitle").innerText = "編輯新聞";
+  document.getElementById("formTitle").innerText = "編輯公告";
   document.getElementById("adminPanel").style.display = "block";
   document.getElementById("editArea").style.display = "block";
-  document.getElementById("fileInfo").innerText = pdfName ? `目前：${pdfName}（重新選擇可替換）` : "";
-  document.getElementById("pdfInput").value = "";
+  document.getElementById("fileInfo").innerText = fileName ? `目前file：${fileName}（重新選擇可替換）` : "";
+  document.getElementById("fileInput").value = "";
   window.scrollTo(0, 0);
 };
 
 window.cancelEdit = function() {
   editingKey = null;
-  currentPdfBase64 = null;
-  currentPdfName = null;
+  currentFileBase64 = null;
+  currentFileName = null;
   document.getElementById("titleInput").value = "";
   document.getElementById("contentInput").value = "";
-  document.getElementById("formTitle").innerText = "新增新聞";
+  document.getElementById("formTitle").innerText = "新增公告";
   document.getElementById("submitStatus").innerText = "";
   document.getElementById("fileInfo").innerText = "";
-  document.getElementById("pdfInput").value = "";
+  document.getElementById("fileInput").value = "";
 };
 
 window.deleteAnnouncement = function(key) {
-  if (!confirm("確定要刪除這則新聞嗎？")) return;
+  if (!confirm("確定要刪除這則公告嗎？")) return;
   remove(ref(db, `announcements/${key}`))
     .catch(err => alert("刪除失敗：" + err.message));
 };
